@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hudobná Hrkálka | GitHub Pages App</title>
+    <!-- Načítanie Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Animácia potrasenia a pulzu pri zahraní tónu */
+        @keyframes rattleShake {
+            0% { transform: scale(1) rotate(0deg); }
+            15% { transform: scale(1.06) rotate(-6deg); }
+            30% { transform: scale(1.08) rotate(6deg); }
+            45% { transform: scale(1.06) rotate(-4deg); }
+            60% { transform: scale(1.04) rotate(4deg); }
+            75% { transform: scale(1.02) rotate(-2deg); }
+            100% { transform: scale(1) rotate(0deg); }
+        }
+
+        @keyframes pulseRing {
+            0% {
+                transform: scale(0.95);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(1.45);
+                opacity: 0;
+            }
+        }
+
+        .animate-rattle {
+            animation: rattleShake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+        }
+
+        .animate-ring {
+            animation: pulseRing 0.5s ease-out forwards;
+        }
+
+        /* Vlastný štýl pre posuvník citlivosti */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #6366f1;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 2px 6px rgba(99, 102, 241, 0.5);
+            border: 2px solid #ffffff;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 999px;
+        }
+        .dark input[type=range]::-webkit-slider-runnable-track {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col justify-between transition-colors duration-200">
+
+    <!-- Hlavička -->
+    <header class="w-full max-w-md mx-auto pt-6 px-4 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+            <div class="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <!-- SVG Ikona hrkálky / vĺn -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 18V5l12-2v13"></path>
+                    <circle cx="6" cy="18" r="3"></circle>
+                    <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-extrabold tracking-tight leading-none">Hudobná Hrkálka</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Pohybový syntetizátor</p>
+            </div>
+        </div>
+
+        <!-- Stavový odznak senzora -->
+        <div id="sensorBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 flex items-center gap-1.5">
+            <span id="sensorDot" class="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span id="sensorStatusText">Čaká na štart</span>
+        </div>
+    </header>
+
+    <!-- Hlavný obsah -->
+    <main class="w-full max-w-md mx-auto px-4 py-4 flex-1 flex flex-col gap-5">
+
+        <!-- Notifikačný banner pre správy/chyby (náhrada za alert) -->
+        <div id="messageBox" class="hidden rounded-2xl p-3.5 text-sm font-medium border transition-all"></div>
+
+        <!-- Vizuálny indikátor hrkálky (Klikateľný pre test na PC) -->
+        <section class="relative bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-col items-center justify-center overflow-hidden">
+            
+            <!-- Pulzujúci kruh na pozadí -->
+            <div id="pulseCircle" class="absolute w-36 h-36 rounded-full bg-indigo-500/20 pointer-events-none opacity-0"></div>
+
+            <!-- Hlavné tlačidlo / vizualizér hrkálky -->
+            <button id="rattleVisual" type="button" aria-label="Zahrať aktuálny tón"
+                class="relative z-10 w-32 h-32 rounded-full bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 text-white shadow-xl shadow-indigo-500/30 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-transform select-none">
+                <span id="activeNoteDisplay" class="text-4xl font-black tracking-tighter">C5</span>
+                <span id="activeFreqDisplay" class="text-xs font-medium text-indigo-100 mt-0.5">523.3 Hz</span>
+            </button>
+
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-4 text-center">
+                Potras mobilom alebo ťukni na kruh pre zahranie tónu
+            </p>
+
+            <!-- Indikátor aktuálnej sily pohybu (Progress Bar) -->
+            <div class="w-full mt-5">
+                <div class="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">
+                    <span>Sila pohybu</span>
+                    <span id="forceValueText">0.0 G</span>
+                </div>
+                <div class="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
+                    <!-- Prahová čiara citlivosti -->
+                    <div id="thresholdMarker" class="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10 transition-all duration-150" style="left: 40%;"></div>
+                    <!-- Aktuálna úroveň pohybu -->
+                    <div id="motionBar" class="h-full bg-gradient-to-r from-emerald-400 via-indigo-500 to-purple-500 rounded-full transition-all duration-75" style="width: 0%;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tlačidlo na aktiváciu senzorov a zvuku (Dôležité pre iOS 13+ a Chrome AudioContext) -->
+        <button id="activateBtn" type="button"
+            class="w-full py-4 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-base shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2.5 transition-all cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span id="activateBtnText">Aktivovať pohyb a zvuk (Štart)</span>
+        </button>
+
+        <!-- Výber tónov: Vianočná stupnica C5 - C6 (4x2 mriežka) -->
+        <section class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
+            <div class="flex items-center justify-between mb-3 gap-2">
+                <div>
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Vianočné tóny</h2>
+                    <span class="text-[11px] text-slate-400">C-dur oktáva (klávesy 1–8)</span>
+                </div>
+                <!-- Prepínač zvuku: Zvonkohra vs Rolničky -->
+                <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-semibold" role="group" aria-label="Typ zvuku">
+                    <button id="soundChimeBtn" type="button" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs transition-all cursor-pointer">
+                        Zvonkohra
+                    </button>
+                    <button id="soundBellsBtn" type="button" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all cursor-pointer">
+                        Rolničky
+                    </button>
+                </div>
+            </div>
+
+            <div id="notesGrid" class="grid grid-cols-4 gap-2">
+                <!-- Tlačidlá C5 - C6 sa vygenerujú dynamicky cez JS -->
+            </div>
+        </section>
+
+        <!-- Nápoveda s notami pre vianočné melódie -->
+        <section class="bg-gradient-to-br from-rose-50/90 to-amber-50/90 dark:from-slate-900 dark:to-slate-900/90 rounded-3xl p-4 shadow-sm border border-rose-200/70 dark:border-rose-900/40">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                    <span>🎄</span> Vianočná nápoveda pre skupinu
+                </span>
+                <select id="songSelect" aria-label="Vyber koledu" class="text-xs font-semibold bg-white/80 dark:bg-slate-800 border border-rose-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-200 cursor-pointer focus:outline-none">
+                    <option value="jingle">Rolničky (Jingle Bells)</option>
+                    <option value="nesiem">Nesiem vám noviny</option>
+                    <option value="ticha">Tichá noc (začiatok)</option>
+                </select>
+            </div>
+            <div id="songNotesBox" class="text-xs font-mono leading-relaxed text-slate-700 dark:text-slate-300 bg-white/70 dark:bg-slate-800/70 rounded-xl p-3 border border-rose-100 dark:border-slate-800">
+                <!-- Dynamicky vyplnené noty vybranej koledy -->
+            </div>
+        </section>
+
+        <!-- Nastavenie citlivosti pohybu -->
+        <section class="bg-white dark:bg-slate-900 rounded-3xl p-5 shadow-sm border border-slate-200/80 dark:border-slate-800">
+            <div class="flex items-center justify-between mb-2">
+                <label for="sensitivitySlider" class="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    Citlivosť potrasenia
+                </label>
+                <span id="sensitivityLabel" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                    Stredná
+                </span>
+            </div>
+            <input id="sensitivitySlider" type="range" min="1" max="100" value="60" class="w-full my-2">
+            <div class="flex justify-between text-[11px] text-slate-400">
+                <span>Jemný pohyb</span>
+                <span>Silné trhnutie</span>
+            </div>
+        </section>
+
+        <!-- Stručný návod na nahratie na GitHub Pages (rozbaľovací) -->
+        <details class="bg-slate-100/80 dark:bg-slate-900/60 rounded-2xl p-4 text-xs text-slate-600 dark:text-slate-400 border border-slate-200/60 dark:border-slate-800">
+            <summary class="font-semibold text-slate-800 dark:text-slate-200 cursor-pointer select-none">
+                Ako túto aplikáciu spustiť na GitHub Pages?
+            </summary>
+            <ol class="list-decimal list-inside space-y-1.5 mt-2.5 leading-relaxed">
+                <li>Vytvor si nový repozitár na <strong>GitHub.com</strong> (napr. <code>hudobna-hrkalka</code>).</li>
+                <li>Nahraj tento súbor do repozitára pod názvom <strong><code>index.html</code></strong>.</li>
+                <li>Otvor <strong>Settings &rarr; Pages</strong>, v časti <em>Branch</em> vyber <code>main</code> a klikni na <strong>Save</strong>.</li>
+                <li>Po minúte otvor vygenerovanú <strong>HTTPS</strong> adresu v mobile (HTTPS je povinné pre prístup k akcelerometru).</li>
+            </ol>
+        </details>
+
+    </main>
+
+    <!-- Pätička -->
+    <footer class="w-full max-w-md mx-auto py-4 px-4 text-center text-xs text-slate-400">
+        Web Audio API + DeviceMotion &bull; Funguje bez internetu po načítaní
+    </footer>
+
+    <script>
+        // Definícia vianočnej stupnice C5 - C6
+        const NOTES = [
+            { id: 'C5', label: 'C5', sub: '523 Hz', freq: 523.25, key: '1', color: 'from-rose-500 via-red-600 to-rose-700' },
+            { id: 'D5', label: 'D5', sub: '587 Hz', freq: 587.33, key: '2', color: 'from-amber-500 via-orange-600 to-amber-700' },
+            { id: 'E5', label: 'E5', sub: '659 Hz', freq: 659.25, key: '3', color: 'from-emerald-500 via-green-600 to-emerald-700' },
+            { id: 'F5', label: 'F5', sub: '698 Hz', freq: 698.46, key: '4', color: 'from-teal-500 via-cyan-600 to-teal-700' },
+            { id: 'G5', label: 'G5', sub: '784 Hz', freq: 783.99, key: '5', color: 'from-sky-500 via-blue-600 to-sky-700' },
+            { id: 'A5', label: 'A5', sub: '880 Hz', freq: 880.00, key: '6', color: 'from-indigo-500 via-indigo-600 to-purple-600' },
+            { id: 'H5', label: 'H5', sub: '988 Hz', freq: 987.77, key: '7', color: 'from-violet-500 via-purple-600 to-fuchsia-700' },
+            { id: 'C6', label: 'C6', sub: '1047 Hz', freq: 1046.50, key: '8', color: 'from-pink-500 via-rose-600 to-red-600' }
+        ];
+
+        // Vianočné melódie pre nápovedu
+        const SONGS = {
+            jingle: {
+                lines: [
+                    '<strong>1. takt:</strong> E5 - E5 - E5 | E5 - E5 - E5',
+                    '<strong>2. takt:</strong> E5 - G5 - C5 - D5 - E5',
+                    '<strong>3. takt:</strong> F5 - F5 - F5 - F5 | F5 - E5 - E5 - E5',
+                    '<strong>4. takt:</strong> E5 - D5 - D5 - E5 - D5 - G5'
+                ]
+            },
+            nesiem: {
+                lines: [
+                    '<strong>1. verš:</strong> G5 - E5 - C5 | G5 - E5 - C5',
+                    '<strong>2. verš:</strong> D5 - E5 - F5 - D5 | E5 - C5',
+                    '<strong>Refrén:</strong> G5 - A5 - G5 - F5 - E5 - D5 - C5'
+                ]
+            },
+            ticha: {
+                lines: [
+                    '<strong>Tichá noc:</strong> G5 - A5 - G5 - E5 | G5 - A5 - G5 - E5',
+                    '<strong>Svätá noc:</strong> D6(C6) - D6(C6) - H5 | C6 - C6 - G5'
+                ]
+            }
+        };
+
+        // Centrálny stav aplikácie
+        const state = {
+            selectedNote: NOTES[2], // Predvolený tón E5 (začiatok Rolničiek)
+            soundMode: 'chime',
+            audioCtx: null,
+            motionActive: false,
+            threshold: 17.2,
+            cooldownMs: 280,
+            lastTriggerTime: 0,
+            lastAccel: { x: null, y: null, z: null },
+            visualDecayTimer: null
+        };
+
+        // Referencie na DOM elementy
+        const sensorBadge = document.getElementById('sensorBadge');
+        const sensorDot = document.getElementById('sensorDot');
+        const sensorStatusText = document.getElementById('sensorStatusText');
+        const messageBox = document.getElementById('messageBox');
+        const pulseCircle = document.getElementById('pulseCircle');
+        const rattleVisual = document.getElementById('rattleVisual');
+        const activeNoteDisplay = document.getElementById('activeNoteDisplay');
+        const activeFreqDisplay = document.getElementById('activeFreqDisplay');
+        const forceValueText = document.getElementById('forceValueText');
+        const thresholdMarker = document.getElementById('thresholdMarker');
+        const motionBar = document.getElementById('motionBar');
+        const activateBtn = document.getElementById('activateBtn');
+        const activateBtnText = document.getElementById('activateBtnText');
+        const soundChimeBtn = document.getElementById('soundChimeBtn');
+        const soundBellsBtn = document.getElementById('soundBellsBtn');
+        const notesGrid = document.getElementById('notesGrid');
+        const songSelect = document.getElementById('songSelect');
+        const songNotesBox = document.getElementById('songNotesBox');
+        const sensitivitySlider = document.getElementById('sensitivitySlider');
+        const sensitivityLabel = document.getElementById('sensitivityLabel');
+
+        /**
+         * Zobrazí informačnú alebo chybovú správu v UI (náhrada za alert).
+         */
+        function showMessage(text, type = 'info') {
+            messageBox.textContent = text;
+            messageBox.className = 'rounded-2xl p-3.5 text-sm font-medium border transition-all ';
+            if (type === 'error') {
+                messageBox.classList.add('bg-rose-50', 'text-rose-800', 'border-rose-200', 'dark:bg-rose-950/60', 'dark:text-rose-200', 'dark:border-rose-800');
+            } else {
+                messageBox.classList.add('bg-amber-50', 'text-amber-800', 'border-amber-200', 'dark:bg-amber-950/60', 'dark:text-amber-200', 'dark:border-amber-800');
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        /**
+         * Inicializuje alebo obnoví Web Audio API kontext.
+         */
+        function initAudioContext() {
+            if (!state.audioCtx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioCtx();
+            }
+            if (state.audioCtx.state === 'suspended') {
+                state.audioCtx.resume();
+            }
+        }
+
+        /**
+         * Syntetizuje vianočný zvonkohrový zvuk (Celesta / Zvonkohra) alebo cinkot Rolničiek
+         * pomocou Web Audio API s metalickými harmonickými zložkami a dlhším dozvukom.
+         */
+        function playHolidayTone(frequency, velocity = 1.0) {
+            try {
+                initAudioContext();
+                const ctx = state.audioCtx;
+                const now = ctx.currentTime;
+                const gainLevel = Math.min(1.0, Math.max(0.45, velocity));
+
+                // 1. Základný krištáľový tón (sínus s dlhším zvonkohrovým dozvukom)
+                const mainOsc = ctx.createOscillator();
+                const mainGain = ctx.createGain();
+                mainOsc.type = 'sine';
+                mainOsc.frequency.setValueAtTime(frequency, now);
+
+                const decayTime = state.soundMode === 'chime' ? 1.35 : 0.95;
+                mainGain.gain.setValueAtTime(0.001, now);
+                mainGain.gain.linearRampToValueAtTime(0.68 * gainLevel, now + 0.008);
+                mainGain.gain.exponentialRampToValueAtTime(0.0008, now + decayTime);
+
+                mainOsc.connect(mainGain);
+                mainGain.connect(ctx.destination);
+
+                // 2. Oktávový alikvótny podtón (2x frekvencia pre jas celesty)
+                const octaveOsc = ctx.createOscillator();
+                const octaveGain = ctx.createGain();
+                octaveOsc.type = 'sine';
+                octaveOsc.frequency.setValueAtTime(frequency * 2, now);
+
+                octaveGain.gain.setValueAtTime(0.001, now);
+                octaveGain.gain.linearRampToValueAtTime(0.28 * gainLevel, now + 0.006);
+                octaveGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.75);
+
+                octaveOsc.connect(octaveGain);
+                octaveGain.connect(ctx.destination);
+
+                // 3. Jemný metalický zvončekový podtón (neceločíselný pomer 2.756x typický pre kovové zvončeky)
+                const bellOsc = ctx.createOscillator();
+                const bellGain = ctx.createGain();
+                bellOsc.type = 'sine';
+                bellOsc.frequency.setValueAtTime(frequency * 2.756, now);
+
+                bellGain.gain.setValueAtTime(0.001, now);
+                bellGain.gain.linearRampToValueAtTime(0.14 * gainLevel, now + 0.004);
+                bellGain.gain.exponentialRampToValueAtTime(0.0008, now + 0.35);
+
+                bellOsc.connect(bellGain);
+                bellGain.connect(ctx.destination);
+
+                mainOsc.start(now);
+                octaveOsc.start(now);
+                bellOsc.start(now);
+
+                mainOsc.stop(now + decayTime + 0.05);
+                octaveOsc.stop(now + 0.8);
+                bellOsc.stop(now + 0.4);
+
+                // 4. Ak je zvolený režim "Rolničky", pridáme jemný cinkavý šum rolničiek (high-pass noise + vysoké zvončeky)
+                if (state.soundMode === 'bells') {
+                    const bufferSize = Math.floor(ctx.sampleRate * 0.22);
+                    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                    const output = noiseBuffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.055));
+                    }
+
+                    const whiteNoise = ctx.createBufferSource();
+                    whiteNoise.buffer = noiseBuffer;
+
+                    const bandpass = ctx.createBiquadFilter();
+                    bandpass.type = 'bandpass';
+                    bandpass.frequency.setValueAtTime(6800, now);
+                    bandpass.Q.setValueAtTime(4.5, now);
+
+                    const jingleGain = ctx.createGain();
+                    jingleGain.gain.setValueAtTime(0.001, now);
+                    jingleGain.gain.linearRampToValueAtTime(0.45 * gainLevel, now + 0.01);
+                    jingleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+                    whiteNoise.connect(bandpass);
+                    bandpass.connect(jingleGain);
+                    jingleGain.connect(ctx.destination);
+
+                    whiteNoise.start(now);
+                    whiteNoise.stop(now + 0.23);
+                }
+
+            } catch (err) {
+                console.error('Chyba pri syntéze zvuku:', err);
+            }
+        }
+
+        /**
+         * Spustí vizuálnu animáciu hrkálky a prehrá aktuálne zvolený tón.
+         */
+        function triggerNote(velocity = 1.0) {
+            playHolidayTone(state.selectedNote.freq, velocity);
+
+            // Jemná haptická odozva na podporovaných mobiloch (Android)
+            if (navigator.vibrate) {
+                navigator.vibrate(25);
+            }
+
+            // Reštart CSS animácie potrasenia
+            rattleVisual.classList.remove('animate-rattle');
+            pulseCircle.classList.remove('animate-ring');
+            void rattleVisual.offsetWidth; // Vynútenie reflow pre opätovné spustenie animácie
+            rattleVisual.classList.add('animate-rattle');
+            pulseCircle.classList.add('animate-ring');
+        }
+
+        /**
+         * Vykreslí tlačidlá pre výber tónov C5 - C6 v 4x2 mriežke.
+         */
+        function renderNoteButtons() {
+            notesGrid.innerHTML = '';
+            NOTES.forEach(note => {
+                const isSelected = note.id === state.selectedNote.id;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `py-3 px-1.5 rounded-2xl border text-center transition-all cursor-pointer select-none flex flex-col items-center justify-center relative ${
+                    isSelected
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/25 scale-[1.03]'
+                        : 'bg-slate-50 dark:bg-slate-800/70 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                }`;
+
+                btn.innerHTML = `
+                    <span class="absolute top-1.5 right-2 text-[9px] font-bold opacity-50">${note.key}</span>
+                    <span class="text-xl font-extrabold leading-none">${note.label}</span>
+                    <span class="text-[10px] mt-1 font-medium ${isSelected ? 'text-indigo-100' : 'text-slate-400'}">${note.sub}</span>
+                `;
+
+                btn.addEventListener('click', () => {
+                    state.selectedNote = note;
+                    updateSelectedNoteUI();
+                    renderNoteButtons();
+                    // Pri výbere tónu ho rovno zahráme pre okamžitú akustickú kontrolu
+                    triggerNote(0.8);
+                });
+
+                notesGrid.appendChild(btn);
+            });
+        }
+
+        /**
+         * Aktualizuje stredový vizuál podľa zvoleného tónu.
+         */
+        function updateSelectedNoteUI() {
+            const note = state.selectedNote;
+            activeNoteDisplay.textContent = note.label;
+            activeFreqDisplay.textContent = `${note.freq.toFixed(1)} Hz`;
+            rattleVisual.className = `relative z-10 w-32 h-32 rounded-full bg-gradient-to-br ${note.color} text-white shadow-xl shadow-indigo-500/30 flex flex-col items-center justify-center cursor-pointer active:scale-95 transition-all select-none`;
+        }
+
+        /**
+         * Prepína režim zvuku medzi Zvonkohrou a Rolničkami.
+         */
+        function setSoundMode(mode) {
+            state.soundMode = mode;
+            const activeClasses = ['bg-white', 'dark:bg-slate-700', 'text-indigo-600', 'dark:text-indigo-300', 'shadow-xs'];
+            const inactiveClasses = ['text-slate-500', 'dark:text-slate-400'];
+
+            if (mode === 'chime') {
+                soundChimeBtn.classList.add(...activeClasses);
+                soundChimeBtn.classList.remove(...inactiveClasses);
+                soundBellsBtn.classList.remove(...activeClasses);
+                soundBellsBtn.classList.add(...inactiveClasses);
+            } else {
+                soundBellsBtn.classList.add(...activeClasses);
+                soundBellsBtn.classList.remove(...inactiveClasses);
+                soundChimeBtn.classList.remove(...activeClasses);
+                soundChimeBtn.classList.add(...inactiveClasses);
+            }
+            triggerNote(0.85);
+        }
+
+        /**
+         * Vykreslí noty vybranej vianočnej piesne v nápovede.
+         */
+        function renderSongHint() {
+            const selectedKey = songSelect.value;
+            const song = SONGS[selectedKey] || SONGS.jingle;
+            songNotesBox.innerHTML = song.lines
+                .map(line => `<div class="py-0.5">${line}</div>`)
+                .join('');
+        }
+
+        /**
+         * Aktualizuje prah citlivosti zo slidera.
+         * Hodnota slidera 1 (veľmi citlivé = nízky prah 4 m/s^2) až 100 (tvrdé trhnutie = vysoký prah 26 m/s^2).
+         */
+        function updateSensitivity() {
+            const val = parseInt(sensitivitySlider.value, 10);
+            // Mapovanie 1..100 na prah 4..26 m/s^2
+            state.threshold = 4 + (val / 100) * 22;
+
+            let label = 'Stredná';
+            if (val < 30) label = 'Vysoká (jemná)';
+            else if (val > 70) label = 'Nízka (silná)';
+            sensitivityLabel.textContent = label;
+
+            // Posunutie červenej rysky na indikátore pohybu (max zobrazenie je 30 m/s^2)
+            const markerPercent = Math.min(96, Math.max(8, (state.threshold / 30) * 100));
+            thresholdMarker.style.left = `${markerPercent}%`;
+        }
+
+        /**
+         * Spracovanie dát z akcelerometra (`devicemotion`).
+         * Využíva `acceleration` (bez gravitácie) ak je dostupná, inak vypočíta delta-G
+         * z `accelerationIncludingGravity` odpočítaním predchádzajúcej vzorky.
+         */
+        function handleDeviceMotion(event) {
+            let deltaMagnitude = 0;
+
+            const acc = event.acceleration;
+            const accG = event.accelerationIncludingGravity;
+
+            if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
+                // Čisté lineárne zrýchlenie bez gravitácie
+                deltaMagnitude = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+            } else if (accG && accG.x !== null && accG.y !== null && accG.z !== null) {
+                // Výpočet zmeny zrýchlenia (delta) na odfiltrovanie statickej gravitácie (9.81 m/s^2)
+                if (state.lastAccel.x !== null) {
+                    const dx = accG.x - state.lastAccel.x;
+                    const dy = accG.y - state.lastAccel.y;
+                    const dz = accG.z - state.lastAccel.z;
+                    deltaMagnitude = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                }
+                state.lastAccel = { x: accG.x, y: accG.y, z: accG.z };
+            } else {
+                return;
+            }
+
+            // Aktualizácia progress baru sily pohybu
+            const gForce = (deltaMagnitude / 9.81).toFixed(1);
+            forceValueText.textContent = `${gForce} G`;
+            const barPercent = Math.min(100, (deltaMagnitude / 30) * 100);
+            motionBar.style.width = `${barPercent}%`;
+
+            // Nulovanie ukazovateľa po ustálení pohybu
+            clearTimeout(state.visualDecayTimer);
+            state.visualDecayTimer = setTimeout(() => {
+                motionBar.style.width = '0%';
+                forceValueText.textContent = '0.0 G';
+            }, 250);
+
+            // Detekcia potrasenia nad nastavený prah s ochranou cooldown
+            const now = performance.now();
+            if (deltaMagnitude >= state.threshold && (now - state.lastTriggerTime) > state.cooldownMs) {
+                state.lastTriggerTime = now;
+                const velocity = Math.min(1.0, deltaMagnitude / (state.threshold * 1.6));
+                triggerNote(velocity);
+            }
+        }
+
+        /**
+         * Aktivácia AudioContextu a vyžiadanie povolenia pre senzory pohybu (vrátane iOS 13+).
+         */
+        async function activateSensorsAndAudio() {
+            // 1. Odomknutie zvuku
+            initAudioContext();
+
+            // Prehranie tichého/jemného potvrdenia odomknutia zvuku
+            triggerNote(0.6);
+
+            // 2. Kontrola podpory DeviceMotionEvent
+            if (typeof window.DeviceMotionEvent === 'undefined') {
+                setSensorStatus('PC / Bez senzora', 'amber');
+                showMessage('Tvoje zariadenie nehlási akcelerometer (pravdepodobne si na PC). Tóny môžeš testovať ťuknutím na kruh alebo tlačidlá tónov.', 'info');
+                return;
+            }
+
+            // 3. Špecifické vyžiadanie povolenia pre iOS 13+ (Safari / Chrome na iOS)
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceMotionEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        startListeningMotion();
+                    } else {
+                        setSensorStatus('Prístup zamietnutý', 'rose');
+                        showMessage('Prístup k pohybovým senzorom bol zamietnutý. Povoľ ho v nastaveniach prehliadača alebo obnov stránku.', 'error');
+                    }
+                } catch (error) {
+                    console.error('Chyba requestPermission:', error);
+                    setSensorStatus('Vyžaduje HTTPS', 'rose');
+                    showMessage('Nepodarilo sa vyžiadať povolenie pre senzory. Uisti sa, že stránka beží cez HTTPS (napr. na GitHub Pages).', 'error');
+                }
+            } else {
+                // Android / ostatné prehliadače nevyžadujú explicitný requestPermission dialog
+                startListeningMotion();
+            }
+        }
+
+        /**
+         * Spustí počúvanie udalosti devicemotion a aktualizuje stav UI.
+         */
+        function startListeningMotion() {
+            if (!state.motionActive) {
+                window.addEventListener('devicemotion', handleDeviceMotion, true);
+                state.motionActive = true;
+            }
+            setSensorStatus('Senzor aktívny', 'emerald');
+            activateBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+            activateBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+            activateBtnText.textContent = 'Hrkálka je aktívna – potras mobilom!';
+            messageBox.classList.add('hidden');
+        }
+
+        /**
+         * Nastaví vizuálny odznak stavu senzora v hlavičke.
+         */
+        function setSensorStatus(text, color) {
+            sensorStatusText.textContent = text;
+            sensorBadge.className = 'px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ';
+            sensorDot.className = 'w-2 h-2 rounded-full ';
+
+            if (color === 'emerald') {
+                sensorBadge.classList.add('bg-emerald-100', 'text-emerald-800', 'dark:bg-emerald-900/40', 'dark:text-emerald-300');
+                sensorDot.classList.add('bg-emerald-500', 'animate-pulse');
+            } else if (color === 'rose') {
+                sensorBadge.classList.add('bg-rose-100', 'text-rose-800', 'dark:bg-rose-900/40', 'dark:text-rose-300');
+                sensorDot.classList.add('bg-rose-500');
+            } else {
+                sensorBadge.classList.add('bg-amber-100', 'text-amber-800', 'dark:bg-amber-900/40', 'dark:text-amber-300');
+                sensorDot.classList.add('bg-amber-500');
+            }
+        }
+
+        // Event listenery
+        activateBtn.addEventListener('click', activateSensorsAndAudio);
+
+        rattleVisual.addEventListener('click', () => {
+            triggerNote(1.0);
+        });
+
+        sensitivitySlider.addEventListener('input', updateSensitivity);
+        soundChimeBtn.addEventListener('click', () => setSoundMode('chime'));
+        soundBellsBtn.addEventListener('click', () => setSoundMode('bells'));
+        songSelect.addEventListener('change', renderSongHint);
+
+        // Podpora klávesnice na počítači (klávesy 1-8 pre tóny C5-C6 alebo Medzerník)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ') {
+                e.preventDefault();
+                triggerNote(1.0);
+                return;
+            }
+            const foundNote = NOTES.find(n => n.key === e.key);
+            if (foundNote) {
+                state.selectedNote = foundNote;
+                updateSelectedNoteUI();
+                renderNoteButtons();
+                triggerNote(0.95);
+            }
+        });
+
+        // Inicializácia aplikácie po načítaní
+        renderNoteButtons();
+        updateSelectedNoteUI();
+        updateSensitivity();
+        renderSongHint();
+    </script>
+</body>
+</html>
